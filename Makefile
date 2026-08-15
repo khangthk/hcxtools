@@ -1,6 +1,6 @@
 PRODUCTION		:= 0
-PRODUCTION_VERSION	:= 6.3.4
-PRODUCTION_YEAR		:= 2024
+PRODUCTION_VERSION	:= 7.1.2
+PRODUCTION_YEAR		:= 2026
 
 ifeq ($(PRODUCTION),1)
 VERSION_TAG		:= $(PRODUCTION_VERSION)
@@ -48,6 +48,9 @@ hcxpsktool_cflags=$(OPENSSL_CFLAGS)
 TOOLS+=hcxpmktool
 hcxpmktool_libs=$(OPENSSL_LIBS)
 hcxpmktool_cflags=$(OPENSSL_CFLAGS)
+TOOLS+=hcxpottool
+hcxpottool_libs=$(OPENSSL_LIBS) -lpthread
+hcxpottool_cflags=$(OPENSSL_CFLAGS)
 TOOLS+=hcxeiutool
 TOOLS+=hcxwltool
 TOOLS+=hcxhash2cap

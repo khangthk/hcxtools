@@ -259,13 +259,6 @@ struct msnetmon_header
 typedef struct msnetmon_header msntm_t;
 #define MSNETMON_SIZE (sizeof(msntm_t))
 /*===========================================================================*/
-struct fcs_frame
-{
- uint32_t	fcs;
-};
-typedef struct fcs_frame fcs_t;
-#define	FCS_SIZE (sizeof(fcs_t))
-/*===========================================================================*/
 struct qos_frame
 {
  uint8_t	control;
@@ -459,6 +452,35 @@ struct wpsie_tag
 typedef struct wpsie_tag wpsie_t;
 #define	WPSIE_SIZE offsetof(wpsie_t, data)
 /*===========================================================================*/
+struct mdid_tag
+{
+ uint16_t		mdid;
+} __attribute__ ((packed));
+typedef struct mdid_tag mdid_t;
+#define	MDID_SIZE sizeof(mdid_t)
+/*===========================================================================*/
+struct fbsst_tag
+{
+ uint16_t			miccontrol;
+ uint8_t			mic[16];
+ uint8_t			anonce[32];
+ uint8_t			snonce[32];
+ uint8_t			subelement[1];
+} __attribute__ ((packed));
+typedef struct fbsst_tag fbsst_t;
+#define	FBSST_SIZE offsetof(fbsst_t, subelement)
+/*===========================================================================*/
+#define FTR0KHID_LEN_MAX	48
+#define FTR1KHID_LEN		6
+struct fbsstse_tag
+{
+ uint8_t			id;
+ uint8_t			len;
+ uint8_t			rxkhid[1];
+} __attribute__ ((packed));
+typedef struct fbsstse_tag fbsstse_t;
+#define	FBSSTSE_SIZE offsetof(fbsstse_t, rxkhid)
+/*===========================================================================*/
 struct suitecount_s
 {
  uint16_t	count;
@@ -535,6 +557,7 @@ struct authentication_frame
 #define	FILS			4
 #define	FILSPFS			5
 #define	FILSPK			6
+#define	EPPKE			9
 #define	NETWORKEAP		128
  uint16_t			sequence;
  uint16_t			statuscode;
@@ -936,11 +959,11 @@ typedef struct chap_frame chap_t;
 struct tacacsp_frame
 {
  uint8_t	version;
-#define TACACSP_VERSION 0xc0
+#define TACACSP_VERSION	0xc0
  uint8_t	type;
-#define TACACS_AUTHENTICATION 1
-#define TACACS2_AUTHENTICATION 2
-#define TACACS3_AUTHENTICATION 3
+#define TACACSP_AUTHEN	1
+#define TACACSP_AUTHOR	2
+#define TACACSP_ACCT	3
  uint8_t	sequencenr;
  uint8_t	flags;
  uint32_t	sessionid;

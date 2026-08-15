@@ -7,21 +7,22 @@
 #define HCX_EAPLEAP_OUT				7
 #define HCX_EAPMD5_JOHN_OUT			8
 #define HCX_TACACSP_OUT				9
-#define HCX_NMEA_OUT				10
-#define HCX_CSV_OUT				11
-#define HCX_RAW_OUT				12
-#define HCX_RAW_IN				13
-#define HCX_LTS					14
-#define HCX_LOG_OUT				15
-#define HCX_PMKID_CLIENT_OUT			16
-#define HCX_PMKID_OUT_DEPRECATED		17
-#define HCX_HCCAPX_OUT_DEPRECATED		18
-#define HCX_HCCAP_OUT_DEPRECATED		19
-#define HCX_PMKIDEAPOLJTR_OUT_DEPRECATED	20
-#define HCX_PREFIX_OUT				21
-#define HCX_ADD_TIMESTAMP			22
-#define HCX_TRACK_IN				23
+#define HCX_NMEA_IN				10
+#define HCX_NMEA_OUT				11
+#define HCX_CSV_OUT				12
+#define HCX_RAW_OUT				13
+#define HCX_RAW_IN				14
+#define HCX_LTS					15
+#define HCX_LOG_OUT				16
+#define HCX_PMKID_CLIENT_OUT			17
+#define HCX_PMKID_OUT_DEPRECATED		18
+#define HCX_HCCAPX_OUT_DEPRECATED		19
+#define HCX_HCCAP_OUT_DEPRECATED		20
+#define HCX_PMKIDEAPOLJTR_OUT_DEPRECATED	21
+#define HCX_PREFIX_OUT				22
+#define HCX_ADD_TIMESTAMP			23
 #define HCX_PMKIDEAPOL_OUT			'o'
+#define HCX_PMKIDEAPOLFTPSK_OUT			'f'
 #define HCX_ESSID_OUT				'E'
 #define HCX_ESSIDPROBEREQUEST_OUT		'R'
 #define HCX_IDENTITY_OUT			'I'
@@ -40,7 +41,7 @@
 #define	OPTIONLEN_MAX			1024
 #define GPX_MAX				256
 #define NMEA_MAX			256
-
+#define NMEA_FIELD_MAX			60
 #define MAX_INTERFACE_ID		255
 
 #define RAW_LEN_MAX			131072
@@ -49,7 +50,8 @@
 #define HANDSHAKELIST_MAX		100000
 #define PMKIDLIST_MAX			100000
 #define MESSAGELIST_MAX			64
-#define EAPOL_AUTHLEN_MAX		251
+#define EAPOL_AUTHLEN_OLD_MAX		255
+#define EAPOL_AUTHLEN_MAX		512
 
 #define EAPMD5HASHLIST_MAX		1000
 #define EAPMD5MSGLIST_MAX		32
@@ -80,6 +82,8 @@
 
 #define HCX_TYPE_PMKID			1
 #define HCX_TYPE_EAPOL			2
+#define HCX_TYPE_PMKID_FTPSK		3
+#define HCX_TYPE_EAPOL_FTPSK		4
 #define	MESSAGE_PAIR_M12E2		0
 #define	MESSAGE_PAIR_M14E4		1
 #define	MESSAGE_PAIR_M32E2		2
@@ -122,12 +126,13 @@ struct tags_s
 #define	TAK_SAE_SHA256B	0x0400
 #define	TAK_SAE_SHA384B	0x0800
 #define TAK_OWE		0x1000
+ uint8_t		pmkid[16];
+ uint8_t		mdidlen;
  uint16_t		mdid;
  uint8_t		r0khidlen;
- uint8_t		r0khid[48];
+ uint8_t		r0khid[FTR0KHID_LEN_MAX];
  uint8_t		r1khidlen;
- uint8_t		r1khid[48];
- uint8_t		pmkid[16];
+ uint8_t		r1khid[FTR1KHID_LEN];
  uint8_t		wpsinfo;
  char			country[2];
  uint8_t		essidlen;
@@ -275,16 +280,24 @@ struct messagelist_s
  uint8_t		ap[6];
  uint8_t		client[6];
  uint8_t		message;
-#define HS_M1		1
-#define HS_M2		2
-#define HS_M3		4
-#define HS_M4		8
-#define HS_PMKID	16
+#define HS_M1		0x01
+#define HS_M2		0x02
+#define HS_M3		0x04
+#define HS_M4		0x08
+#define HS_PMKID	0x10
+#define HS_PMKIDFTPSK	0x20
  uint64_t		rc;
  uint8_t		nonce[32];
  uint8_t		pmkid[16];
+ uint8_t		mdidlen;
+ uint16_t		mdid;
+ uint8_t		r0khidlen;
+ uint8_t		r0khid[FTR0KHID_LEN_MAX];
+ uint8_t		r1khidlen;
+ uint8_t		r1khid[FTR1KHID_LEN];
  uint16_t		eapauthlen;
  uint8_t		eapol[EAPOL_AUTHLEN_MAX];
+
 };
 typedef struct messagelist_s messagelist_t;
 #define	MESSAGELIST_SIZE (sizeof(messagelist_t))
@@ -312,6 +325,12 @@ struct handshakelist_s
  uint8_t		client[6];
  uint8_t		anonce[32];
  uint8_t		pmkid[16];
+ uint8_t		mdidlen;
+ uint16_t		mdid;
+ uint8_t		r0khidlen;
+ uint8_t		r0khid[FTR0KHID_LEN_MAX];
+ uint8_t		r1khidlen;
+ uint8_t		r1khid[FTR1KHID_LEN];
  uint16_t		eapauthlen;
  uint8_t		eapol[256];
 };
@@ -364,13 +383,21 @@ struct pmkidlist_s
 {
  uint64_t		timestamp;
  uint8_t		status;
-#define PMKID_AP	0x01
-#define PMKID_APPSK256	0x02
-#define PMKID_CLIENT	0x10
+#define PMKID_AP		0x01
+#define PMKID_APPSK256		0x02
+#define PMKID_CLIENT		0x04
+#define PMKID_AP_FTPSK		0x10
+#define PMKID_CLIENT_FTPSK	0x20
  uint8_t		ap[6];
  uint8_t		client[6];
  uint8_t		anonce[32];
  uint8_t		pmkid[16];
+ uint8_t		mdidlen;
+ uint16_t		mdid;
+ uint8_t		r0khidlen;
+ uint8_t		r0khid[FTR0KHID_LEN_MAX];
+ uint8_t		r1khidlen;
+ uint8_t		r1khid[FTR1KHID_LEN];
 };
 typedef struct pmkidlist_s pmkidlist_t;
 #define	PMKIDLIST_SIZE (sizeof(pmkidlist_t))

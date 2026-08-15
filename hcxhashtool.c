@@ -12,6 +12,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <regex.h>
 
 #if defined (__APPLE__) || defined(__OpenBSD__)
 #include <sys/socket.h>
@@ -113,8 +114,10 @@ static int essidlenmin;
 static int essidlenmax;
 static int filteressidlen;
 static char *filteressidptr;
+static regex_t essidregex;
 static int filteressidpartlen;
 static char *filteressidpartptr;
+static char *filteressidregexptr;
 
 static char *filtervendorptr;
 static char *filtervendorapptr;
@@ -157,6 +160,7 @@ static void closelists(void)
 {
 if(hashlist != NULL) free(hashlist);
 if(ouilist != NULL) free(ouilist);
+if(filteressidregexptr != NULL) regfree(&essidregex);
 if(ctxhmac != NULL)
 	{
 	EVP_MAC_CTX_free(ctxhmac);
@@ -193,7 +197,7 @@ johnpmkidwrittencount = 0;
 johneapolwrittencount = 0;
 hccapxwrittencount = 0;
 hccapwrittencount = 0;
-if((hashlist = (hashlist_t*)calloc(hashlistcount, HASHLIST_SIZE)) == NULL) return false;
+if((hashlist = (hashlist_t*)calloc(hashlistcount, HASHLIST_SIZE +1)) == NULL) return false;
 if((ouilist = (ouilist_t*)calloc(ouilistcount, OUILIST_SIZE)) == NULL) return false;
 
 ERR_load_crypto_strings();
@@ -268,15 +272,16 @@ if(essidlenmin != 0)			fprintf(stdout, "filter by ESSID len min.......: %d\n", e
 if(essidlenmax != 32)			fprintf(stdout, "filter by ESSID len max.......: %d\n", essidlenmax);
 if(filteressidptr != NULL)		fprintf(stdout, "filter by ESSID...............: %s\n", filteressidptr);
 if(filteressidpartptr != NULL)		fprintf(stdout, "filter by part of ESSID.......: %s\n", filteressidpartptr);
+if(filteressidregexptr != NULL)		fprintf(stdout, "filter by ESSID RegEx.........: %s\n", filteressidregexptr);
 if(flagfiltermacap == true)
 	{
 	vendor = getvendor(filtermacap);
-	fprintf(stdout, "filter by MAC.................: %02x%02x%02x%02x%02x%02x (%s)\n", filtermacap[0], filtermacap[1], filtermacap[2], filtermacap[3], filtermacap[4], filtermacap[5], vendor);
+	fprintf(stdout, "filter by MAC AP..............: %02x%02x%02x%02x%02x%02x (%s)\n", filtermacap[0], filtermacap[1], filtermacap[2], filtermacap[3], filtermacap[4], filtermacap[5], vendor);
 	}
 if(flagfiltermacclient == true)
 	{
 	vendor = getvendor(filtermacclient);
-	fprintf(stdout, "filter by MAC.................: %02x%02x%02x%02x%02x%02x (%s)\n", filtermacclient[0], filtermacclient[1], filtermacclient[2], filtermacclient[3], filtermacclient[4], filtermacclient[5], vendor);
+	fprintf(stdout, "filter by MAC CLIENT..........: %02x%02x%02x%02x%02x%02x (%s)\n", filtermacclient[0], filtermacclient[1], filtermacclient[2], filtermacclient[3], filtermacclient[4], filtermacclient[5], vendor);
 	}
 
 if(flagfilterouiap == true)
@@ -423,7 +428,7 @@ if(memcmp(eapoltmp, zeiger->hash, 16) == 0)
 			}
 		}
 	else fprintf(stdout, ":");
-	fprintf(stdout, ":%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x", 
+	fprintf(stdout, ":%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
 		pmk[0], pmk[1], pmk[2], pmk[3], pmk[4], pmk[5], pmk[6], pmk[7],
 		pmk[8], pmk[9], pmk[10], pmk[11], pmk[12], pmk[13], pmk[14], pmk[15],
 		pmk[16], pmk[17], pmk[18], pmk[19], pmk[20], pmk[21], pmk[22], pmk[23],
@@ -471,7 +476,7 @@ if(memcmp(message, zeiger->hash, 16) == 0)
 			}
 		}
 	else fprintf(stdout, ":");
-	fprintf(stdout, ":%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x", 
+	fprintf(stdout, ":%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
 		pmk[0], pmk[1], pmk[2], pmk[3], pmk[4], pmk[5], pmk[6], pmk[7],
 		pmk[8], pmk[9], pmk[10], pmk[11], pmk[12], pmk[13], pmk[14], pmk[15],
 		pmk[16], pmk[17], pmk[18], pmk[19], pmk[20], pmk[21], pmk[22], pmk[23],
@@ -608,6 +613,7 @@ static void writejohnrecord(FILE *fh_john, hashlist_t *zeiger)
 {
 static wpakey_t *wpak;
 static int i;
+static char essid[ESSID_LEN_MAX+1];
 static unsigned char *hcpos;
 static hccap_t hccap;
 
@@ -625,6 +631,12 @@ if(filteressidptr != NULL)
 if(filteressidpartptr != NULL)
 	{
 	if(ispartof(filteressidpartlen, (uint8_t*)filteressidpartptr, zeiger->essidlen, zeiger->essid) == false) return;
+	}
+if(filteressidregexptr != NULL)
+	{
+	strncpy(essid, (char*)zeiger->essid, zeiger->essidlen);
+	essid[zeiger->essidlen] = '\0';
+	if(regexec(&essidregex, essid, 0, NULL, 0) == REG_NOMATCH) return;
 	}
 if((filtervendorptr != NULL) || (filtervendorapptr != NULL) || (filtervendorclientptr != NULL))
 	{
@@ -675,7 +687,7 @@ if(hccap.keyver == 1) fprintf(fh_john, "::WPA");
 else fprintf(fh_john, "::WPA2");
 if((zeiger->mp &0x7) == 0) fprintf(fh_john, ":not verified");
 else fprintf(fh_john, ":verified");
-fprintf(fh_john, ":converted by hcxhastool\n");
+fprintf(fh_john, ":converted by hcxhashtool\n");
 johneapolwrittencount++;
 return;
 }
@@ -725,6 +737,7 @@ typedef struct hccap_s hccap_t;
 
 static wpakey_t *wpak;
 static hccap_t hccap;
+static char essid[ESSID_LEN_MAX+1];
 
 if(zeiger->type == HCX_TYPE_PMKID) return;
 if((zeiger->essidlen < essidlenmin) || (zeiger->essidlen > essidlenmax)) return;
@@ -741,6 +754,12 @@ if(filteressidptr != NULL)
 if(filteressidpartptr != NULL)
 	{
 	if(ispartof(filteressidpartlen, (uint8_t*)filteressidpartptr, zeiger->essidlen, zeiger->essid) == false) return;
+	}
+if(filteressidregexptr != NULL)
+	{
+	strncpy(essid, (char *) zeiger->essid, zeiger->essidlen);
+	essid[zeiger->essidlen] = '\0';
+	if(regexec(&essidregex, essid, 0, NULL, 0) == REG_NOMATCH) return;
 	}
 if((filtervendorptr != NULL) || (filtervendorapptr != NULL) || (filtervendorclientptr != NULL))
 	{
@@ -787,7 +806,7 @@ for(zeiger = hashlist; zeiger < hashlist +pmkideapolcount; zeiger++)
 		snprintf(groupoutname, PATH_MAX -1, "%02x%02x%02x%02x%02x%02x-%04d.hccap", zeiger->ap[0], zeiger->ap[1], zeiger->ap[2], zeiger->ap[3], zeiger->ap[4], zeiger->ap[5], c);
 		c++;
 		}
-	while (stat(groupoutname, &statinfo) == 0); 
+	while (stat(groupoutname, &statinfo) == 0);
 	if((fh_hccap = fopen(groupoutname, "a")) == NULL) continue;
 	writehccaprecord(fh_hccap, zeiger);
 	if(fh_hccap != NULL) fclose(fh_hccap);
@@ -829,6 +848,7 @@ static void writehccapxrecord(FILE *fh_hccapx, hashlist_t *zeiger)
 {
 static wpakey_t *wpak;
 static hccapx_t hccapx;
+static char essid[ESSID_LEN_MAX+1];
 
 if(zeiger->type == HCX_TYPE_PMKID) return;
 if((zeiger->essidlen < essidlenmin) || (zeiger->essidlen > essidlenmax)) return;
@@ -845,6 +865,12 @@ if(filteressidptr != NULL)
 if(filteressidpartptr != NULL)
 	{
 	if(ispartof(filteressidpartlen, (uint8_t*)filteressidpartptr, zeiger->essidlen, zeiger->essid) == false) return;
+	}
+if(filteressidregexptr != NULL)
+	{
+	strncpy(essid, (char *) zeiger->essid, zeiger->essidlen);
+	essid[zeiger->essidlen] = '\0';
+	if(regexec(&essidregex, essid, 0, NULL, 0) == REG_NOMATCH) return;
 	}
 if((filtervendorptr != NULL) || (filtervendorapptr != NULL) || (filtervendorclientptr != NULL))
 	{
@@ -989,6 +1015,7 @@ return;
 static void writepmkideapolhashline(FILE *fh_pmkideapol, hashlist_t *zeiger)
 {
 static int p;
+static char essid[ESSID_LEN_MAX+1];
 
 if((zeiger->essidlen < essidlenmin) || (zeiger->essidlen > essidlenmax)) return;
 if(((zeiger->type &hashtype) != HCX_TYPE_PMKID) && ((zeiger->type &hashtype) != HCX_TYPE_EAPOL)) return;
@@ -1004,6 +1031,14 @@ if(filteressidptr != NULL)
 if(filteressidpartptr != NULL)
 	{
 	if(ispartof(filteressidpartlen, (uint8_t*)filteressidpartptr, zeiger->essidlen, zeiger->essid) == false) return;
+	}
+if(filteressidregexptr != NULL)
+	{
+	strncpy(essid, (char*)zeiger->essid, zeiger->essidlen);
+	essid[zeiger->essidlen] = '\0';
+	//p = regexec(&essidregex, essid, 0, NULL, 0);
+	//printf("%d\n", p);
+	if(regexec(&essidregex, essid, 0, NULL, 0) == REG_NOMATCH) return;
 	}
 if((filtervendorptr != NULL) || (filtervendorapptr != NULL) || (filtervendorclientptr != NULL))
 	{
@@ -1188,7 +1223,6 @@ static FILE *fh_pmkideapol;
 static hashlist_t *zeiger;
 static hashlist_t *zeiger2;
 static hashlist_t *zeigerbegin;
-static hashlist_t *zeigerend;
 static struct stat statinfo;
 
 if(lcmax == 0) lcmax = pmkideapolcount;
@@ -1204,21 +1238,17 @@ if(pmkideapoloutname != NULL)
 qsort(hashlist, pmkideapolcount, HASHLIST_SIZE, sort_hashlist_by_essid);
 zeigerbegin = hashlist;
 lc = 0;
-for(zeiger = hashlist +1; zeiger < hashlist +pmkideapolcount; zeiger++)
+for(zeiger = hashlist +1; zeiger < hashlist +pmkideapolcount +1; zeiger++)
 	{
-	if(memcmp(zeigerbegin->essid, zeiger->essid, ESSID_LEN_MAX) == 0)
-		{
-		zeigerend = zeiger;
-		lc++;
-		}
+	if(memcmp(zeigerbegin->essid, zeiger->essid, ESSID_LEN_MAX) == 0) lc++;
 	else
 		{
-		if(((zeigerend -zeigerbegin) >= lcmin) && ((zeigerend -zeigerbegin) <= lcmax))
+		if((lc >= lcmin) && (lc <= lcmax))
 			{
-			for(zeiger2 = zeigerbegin; zeiger2 <= zeigerend; zeiger2++) writepmkideapolhashline(fh_pmkideapol, zeiger2);
+			for(zeiger2 = zeigerbegin; zeiger2 < zeiger; zeiger2++) writepmkideapolhashline(fh_pmkideapol, zeiger2);
 			}
-		lc = 0;
 		zeigerbegin = zeiger;
+		lc = 0;
 		}
 	}
 if(fh_pmkideapol != NULL) fclose(fh_pmkideapol);
@@ -1266,6 +1296,7 @@ static uint8_t keyver;
 static uint8_t keyinfo;
 static uint64_t rc;
 static char *vendor;
+static char essid[ESSID_LEN_MAX+1];
 
 if((zeiger->essidlen < essidlenmin) || (zeiger->essidlen > essidlenmax)) return;
 if(((zeiger->type &hashtype) != HCX_TYPE_PMKID) && ((zeiger->type &hashtype) != HCX_TYPE_EAPOL)) return;
@@ -1281,6 +1312,12 @@ if(filteressidptr != NULL)
 if(filteressidpartptr != NULL)
 	{
 	if(ispartof(filteressidpartlen, (uint8_t*)filteressidpartptr, zeiger->essidlen, zeiger->essid) == false) return;
+	}
+if(filteressidregexptr != NULL)
+	{
+	strncpy(essid, (char *) zeiger->essid, zeiger->essidlen);
+	essid[zeiger->essidlen] = '\0';
+	if(regexec(&essidregex, essid, 0, NULL, 0) == REG_NOMATCH) return;
 	}
 if((filtervendorptr != NULL) || (filtervendorapptr != NULL) || (filtervendorclientptr != NULL))
 	{
@@ -1326,9 +1363,9 @@ if(zeiger->type == HCX_TYPE_EAPOL)
 	else fprintf(fh_pmkideapol, "NC INFO....: NC not detected\n");
 	keyinfo = (getkeyinfo(ntohs(wpak->keyinfo)));
 	fprintf(fh_pmkideapol, "EAPOL MSG..: %d\n", keyinfo);
-	if((zeiger->mp & 0x07) == 0x00) fprintf(fh_pmkideapol, "MP M1M2 E2.: challenge\n");
+	if((zeiger->mp & 0x07) == 0x00) fprintf(fh_pmkideapol, "MP M1M2 E2.: challenge - ANONCE from M1\n");
+	if((zeiger->mp & 0x07) == 0x02) fprintf(fh_pmkideapol, "MP M2M3 E2.: authorized - ANONCE from M3)\n");
 	if((zeiger->mp & 0x07) == 0x01) fprintf(fh_pmkideapol, "MP M1M4 E4.: authorized\n");
-	if((zeiger->mp & 0x07) == 0x02) fprintf(fh_pmkideapol, "MP M2M3 E2.: authorized\n");
 	if((zeiger->mp & 0x07) == 0x03) fprintf(fh_pmkideapol, "MP M2M3 E3.: authorized\n");
 	if((zeiger->mp & 0x07) == 0x04) fprintf(fh_pmkideapol, "MP M3M4 E3.: authorized\n");
 	if((zeiger->mp & 0x07) == 0x05) fprintf(fh_pmkideapol, "MP M3M4 E4.: authorized\n");
@@ -1714,7 +1751,7 @@ while(1)
 	{
 	if((len = fgetline(fh_essidlistin, PMKIDEAPOL_BUFFER_LEN, linein)) == -1) break;
 	if((len < 1) || (len > 70)) continue;
-	memset(zeiger->essid, 0, 33);
+	memset(zeiger->essid, 0, ESSID_LEN_MAX);
 	if((len >= 8) && ((len %2) == 0) && (linein[len -1] == ']') && (memcmp(linein, hexpfx, 5) == 0))
 		{
 		linein[len -1] = 0;
@@ -2150,7 +2187,7 @@ static void showvendorlist(void)
 static ouilist_t *zeiger;
 
 fprintf(stdout, "\n");
-for(zeiger = ouilist; zeiger < ouilist +ouicount; zeiger++) fprintf(stdout, "%02x%02x%02x %s\n", zeiger->oui[0], zeiger->oui[1], zeiger->oui[2], zeiger->vendor); 
+for(zeiger = ouilist; zeiger < ouilist +ouicount; zeiger++) fprintf(stdout, "%02x%02x%02x %s\n", zeiger->oui[0], zeiger->oui[1], zeiger->oui[2], zeiger->vendor);
 return;
 }
 /*===========================================================================*/
@@ -2328,7 +2365,7 @@ fprintf(stdout, "%s %s (C) %s ZeroBeat\n"
 	"-d          : download https://standards-oui.ieee.org/oui.txt\n"
 	"              and save to ~/.hcxtools/oui.txt\n"
 	"              internet connection required\n"
-//	"-p          : input PBKDF2 file (hashcat potfile 22000 format)\n" 
+//	"-p          : input PBKDF2 file (hashcat potfile 22000 format)\n"
 	"-h          : show this help\n"
 	"-v          : show version\n"
 	"\n"
@@ -2359,6 +2396,7 @@ fprintf(stdout, "%s %s (C) %s ZeroBeat\n"
 	"--essid-partx=<part of ESSID>: filter by part of ESSID (case insensitive)\n"
 	"                               locale and wide characters are ignored\n"
 	"--essid-list=<file>          : filter by ESSID file\n"
+	"--essid-regex=<regex>        : filter ESSID by regular expression\n"
 	"--mac-ap=<MAC>               : filter AP by MAC\n"
 	"                               format: 001122334455, 00:11:22:33:44:55, 00-11-22-33-44-55 (hex)\n"
 	"--mac-client=<MAC>           : filter CLIENT by MAC\n"
@@ -2480,6 +2518,7 @@ static const struct option long_options[] =
 	{"essid-part",			required_argument,	NULL,	HCX_FILTER_ESSID_PART},
 	{"essid-partx",			required_argument,	NULL,	HCX_FILTER_ESSID_PARTX},
 	{"essid-list",			required_argument,	NULL,	HCX_FILTER_ESSID_LIST_IN},
+	{"essid-regex",			required_argument,	NULL,	HCX_FILTER_ESSID_REGEX},
 	{"mac-ap",			required_argument,	NULL,	HCX_FILTER_MAC_AP},
 	{"mac-client",			required_argument,	NULL,	HCX_FILTER_MAC_CLIENT},
 	{"mac-list",			required_argument,	NULL,	HCX_FILTER_MAC_LIST_IN},
@@ -2542,6 +2581,7 @@ macinstring = NULL;
 pmkinstring = NULL;
 filteressidptr = NULL;
 filteressidpartptr = NULL;
+filteressidregexptr = NULL;
 filtervendorptr = NULL;
 filtervendorapptr = NULL;
 filtervendorclientptr = NULL;
@@ -2580,7 +2620,7 @@ while((auswahl = getopt_long (argc, argv, short_options, long_options, &index)) 
 	switch (auswahl)
 		{
 		case HCX_PMKIDEAPOL_IN:
-		if((hccapxinname != NULL) || (hccapinname != NULL)) 
+		if((hccapxinname != NULL) || (hccapinname != NULL))
 			{
 			fprintf(stderr, "only one input hash format is allowed\n");
 			exit(EXIT_FAILURE);
@@ -2700,6 +2740,16 @@ while((auswahl = getopt_long (argc, argv, short_options, long_options, &index)) 
 		essidinname = optarg;
 		break;
 
+		case HCX_FILTER_ESSID_REGEX:
+		filteressidregexptr = optarg;
+		p1 = regcomp(&essidregex, filteressidregexptr, REG_EXTENDED);
+		if(p1)
+			{
+			fprintf(stderr, "Could not compile regex\n");
+			exit(EXIT_FAILURE);
+			}
+		break;
+
 		case HCX_HASH_MIN:
 		lcmin = strtol(optarg, NULL, 10);
 		break;
@@ -2760,6 +2810,11 @@ while((auswahl = getopt_long (argc, argv, short_options, long_options, &index)) 
 			exit(EXIT_FAILURE);
 			}
 		flagfiltermacap = true;
+		if(flagfiltermacclient == true)
+			{
+			fprintf(stderr, "mac-ap allowed in combination with mac-client\n");
+			exit(EXIT_FAILURE);
+			}
 		break;
 
 		case HCX_FILTER_MAC_CLIENT:
@@ -2781,6 +2836,11 @@ while((auswahl = getopt_long (argc, argv, short_options, long_options, &index)) 
 			exit(EXIT_FAILURE);
 			}
 		flagfiltermacclient = true;
+		if(flagfiltermacap == true)
+			{
+			fprintf(stderr, "mac-client allowed in combination with mac-ap\n");
+			exit(EXIT_FAILURE);
+			}
 		break;
 
 		case HCX_FILTER_MAC_LIST_IN:

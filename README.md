@@ -44,8 +44,9 @@ Detailed Description
 | -------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | hcxpcapngtool  | Tool to convert raw capture files to Hashcat and JtR readable formats.                                                 |
 | hcxhashtool    | Tool to filter hashes from HC22000 files based on user input.                                                          |
-| hcxpsktool     | Tool to get weak PSK candidates from hash files or user input.                                                         |
 | hcxpmktool     | Tool to calculate and verify a PSK and/or a PMK.                                                                       |
+| hcxpottool     | Tool to to handle ASCII format and several UTF formats of hashcat's pot file.                                          |
+| hcxpsktool     | Tool to get weak PSK candidates from hash files or user input.                                                         |
 | hcxeiutool     | Tool to prepare -E -I -U output of hcxpcapngtool for use by Hashcat + rule or JtR + rule.                              |
 | hcxwltool      | Tool to calculate candidates for Hashcat and JtR based on mixed wordlists.                                             |
 | hcxhash2cap    | Tool to convert hash files (PMKID&EAPOL, PMKID, EAPOL-hccapx, EAPOL-hccap, WPAPSK-john) to cap.                        |
@@ -92,14 +93,19 @@ make install PREFIX=/usr/local (as super user)
 Requirements
 --------------
 
+You might expect me to recommend that everyone should be using hcxdumptool/hcxtools. But the fact of the matter is, however, that hcxdumptool/hcxtools is NOT recommended to be used by unexperienced users or newbies.
+If you are not familiar with Linux generally or if you do not have at least a basic level of knowledge as mentioned in section "Requirements", hcxdumptool/hcxtools is probably not what you are looking for.
+However, if you have that knowledge this tools can do magic.
+
 * Knowledge of radio technology.
 * Knowledge of electromagnetic-wave engineering.
 * Detailed knowledge of 802.11 protocol.
 * Detailed knowledge of key derivation functions.
+* Detailed knowledge of NMEA 0183 protocol.
 * Detailed knowledge of Linux
-* Operating system: Linux (recommended: kernel >= 6.4, mandatory: kernel >= 5.10)
+* Operating system: Linux (latest longterm or stable [kernel](https://www.kernel.org), mandatory >= 5.15)
 * Recommendation: Arch Linux (notebooks and desktop systems), OpenWRT (small systems like Raspberry Pi, WiFi router)
-* gcc >= 13 recommended (deprecated versions are not supported: https://gcc.gnu.org/)
+* gcc >= 16 recommended (deprecated versions are not supported: https://gcc.gnu.org/)
 * libopenssl (>= 3.0) and openssl-dev installed
 * librt and librt-dev installed. (Should be installed by default.)
 * zlib and zlib-dev installed. (For gzip compressed cap/pcap/pcapng files.)
@@ -115,7 +121,7 @@ Useful Scripts
 | Script       | Description                                              |
 | ------------ | -------------------------------------------------------- |
 | piwritecard  | Example script to restore SD-Card                        |
-| piwreadcard  | Example script to backup SD-Card                         |
+| pireadcard   | Example script to backup SD-Card                         |
 | hcxgrep.py   | Extract records from m22000 hashline/hccapx/pmkid file based on regexp   |
 
 Notice
@@ -136,29 +142,73 @@ Notice
 Bitmask Message Pair Field (hcxpcapngtool)
 -------------------------------------------
 
-bit 0-2
+Each EAPOL hash in the `WPA*02*` hash line is built from two handshake
+messages. One message provides the EAPOL frame (which contains the MIC
+to verify against and one nonce already embedded at byte offset 17). The
+other message provides the second nonce that is not present in the frame.
+Together they give hashcat everything it needs: ANonce + SNonce + MIC +
+EAPOL frame.
 
-000 = M1+M2, EAPOL from M2 (challenge)
+### Why 12 theoretical combos become 6 message pairs with 3 unique hashes
 
-001 = M1+M4, EAPOL from M4 if not zeroed (authorized)
+There are three independent choices when building a hash from a complete
+4-way handshake:
 
-010 = M2+M3, EAPOL from M2 (authorized)
+- **ANonce source**: M1 or M3 (2 choices)
+- **SNonce source**: M2 or M4 (2 choices)
+- **EAPOL/MIC source**: M2, M3, or M4 (3 choices, M1 has no MIC)
 
-011 = M2+M3, EAPOL from M3 (authorized) - unused
+That gives 2 x 2 x 3 = **12 theoretical combinations**.
 
-100 = M3+M4, EAPOL from M3 (authorized) - unused
+But the EAPOL frame already contains one nonce embedded at byte offset
+17 (SNonce in M2/M4, ANonce in M3). Hashcat extracts that automatically.
+It only needs the *other* nonce supplied externally. So the real model
+is: 3 EAPOL sources x 2 external nonce sources = **6 message pairs**.
 
-101 = M3+M4, EAPOL from M4 if not zeroed (authorized)
+Within one handshake session, M1 and M3 carry the same ANonce value, and
+M2 and M4 carry the same SNonce value. Swapping which message the
+external nonce came from doesn't change the nonce itself. So each pair
+of message pairs that share the same EAPOL source produces an identical
+hash. 6 pairs collapse to **3 unique hashes**, one per EAPOL source.
 
-3: reserved
+### Bits 0-2: Message Pair Type
 
-4: ap-less attack (set to 1) - no nonce-error-corrections necessary
+Rows are grouped by EAPOL source (Hash 1/2/3). Pairs within the same
+group produce identical crackable hashes.
 
-5: LE router detected (set to 1) - nonce-error-corrections only for LE necessary
+| ID   | Bits | Hex  | Messages | EAPOL from        | External Nonce | Unique Hash | Status |
+|------|------|------|----------|-------------------|----------------|-------------|--------|
+| N1E2 | 000  | 0x00 | M1+M2    | M2 (MIC + SNonce) | M1 (ANonce)    | Hash 1      | challenge, default |
+| N3E2 | 010  | 0x02 | M2+M3    | M2 (MIC + SNonce) | M3 (ANonce)    | Hash 1      | authorized, default |
+| N2E3 | 011  | 0x03 | M2+M3    | M3 (MIC + ANonce) | M2 (SNonce)    | Hash 2      | authorized, --all |
+| N4E3 | 100  | 0x04 | M3+M4    | M3 (MIC + ANonce) | M4 (SNonce)    | Hash 2      | authorized, --all (requires non-zero M4 nonce) |
+| N1E4 | 001  | 0x01 | M1+M4    | M4 (MIC + SNonce) | M1 (ANonce)    | Hash 3      | authorized, --all (requires non-zero M4 nonce) |
+| N3E4 | 101  | 0x05 | M3+M4    | M4 (MIC + SNonce) | M3 (ANonce)    | Hash 3      | authorized, --all (requires non-zero M4 nonce) |
 
-6: BE router detected (set to 1) - nonce-error-corrections only for BE necessary
+The **ID** column uses the format N{nonce source}E{eapol source}. For
+example, N1E2 means the external nonce comes from M1 and the EAPOL frame
+comes from M2.
 
-7: not replaycount checked (set to 1) - replaycount not checked, nonce-error-corrections definitely necessary
+"Challenge" means only M1 and M2 were needed. The AP has not yet
+confirmed the password was correct (M3 was not required). "Authorized"
+means M3 or M4 were involved, which only exist after both sides verified
+the MIC. The password was both sent and validated.
+
+M4's Key Nonce shall be 0 per IEEE 802.11i-2004 Section 8.5.3.4. Most
+implementations conform to the spec and zero it. Some reuse the SNonce
+from M2 instead. When zeroed, message pairs 0x01 and 0x05 are unusable
+because hashcat cannot reconstruct both nonces. In practice, most
+captures yield only Hash 1 and Hash 2.
+
+### Bits 3-7: Flags
+
+| Bit | Hex  | Meaning |
+|-----|------|---------|
+| 3   | 0x08 | Reserved |
+| 4   | 0x10 | AP-less attack (no nonce-error-corrections necessary) |
+| 5   | 0x20 | LE router detected (nonce-error-corrections only for LE necessary) |
+| 6   | 0x40 | BE router detected (nonce-error-corrections only for BE necessary) |
+| 7   | 0x80 | Replaycount not checked (nonce-error-corrections definitely necessary) |
 
 Warning
 --------

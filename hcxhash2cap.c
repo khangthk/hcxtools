@@ -52,7 +52,6 @@ static unsigned long long int johnskipped;
 /*===========================================================================*/
 static void globalinit(void)
 {
-
 srand(time(NULL));
 gettimeofday(&tv, NULL);
 timestamp = ((uint64_t)tv.tv_sec * 1000000) + tv.tv_usec;
@@ -92,13 +91,13 @@ static const uint8_t m1wpa1data[] =
 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-0x00, 0x00,
+0x00, 0x00
 };
 #define M1WPA1DATA_SIZE sizeof(m1wpa1data)
 
-static uint8_t packetout[0xff];
+static uint8_t packetout[PACKETOUTBUFFSMAX];
 
-memset(&packetout, 0, 0xff);
+memset(&packetout, 0, PACKETOUTBUFFSMAX);
 pcaph = (pcaprec_hdr_t*)packetout;
 pcaph->ts_sec = timestamp /1000000;
 pcaph->ts_usec = timestamp %1000000;
@@ -117,14 +116,8 @@ rc = byte_swap_64(rc);
 #endif
 wpak->keylen = keylen;
 wpak->replaycount = rc;
-for(c = 0; c < 32; c++)
-	{
-	packetout[PCAPREC_SIZE +0x33 +c] = anonce[c];
-	}
-if(write(fd_cap, packetout, PCAPREC_SIZE +M1WPA1DATA_SIZE) < 0)
-	{
-	perror("\nfailed to write EAPOL packet");
-	}
+for(c = 0; c < 32; c++) packetout[PCAPREC_SIZE +0x33 +c] = anonce[c];
+if(write(fd_cap, packetout, PCAPREC_SIZE +M1WPA1DATA_SIZE) < 0) perror("\nfailed to write EAPOL packet");
 return;
 }
 /*===========================================================================*/
@@ -151,13 +144,13 @@ static const uint8_t m1wpa2data[] =
 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-0x00, 0x00,
+0x00, 0x00
 };
 #define M1WPA2DATA_SIZE sizeof(m1wpa2data)
 
-static uint8_t packetout[0xff];
+static uint8_t packetout[PACKETOUTBUFFSMAX];
 
-memset(&packetout, 0, 0xff);
+memset(&packetout, 0, PACKETOUTBUFFSMAX);
 pcaph = (pcaprec_hdr_t*)packetout;
 pcaph->ts_sec = timestamp /1000000;
 pcaph->ts_usec = timestamp %1000000;
@@ -177,14 +170,8 @@ rc = byte_swap_64(rc);
 #endif
 wpak->keylen = keylen;
 wpak->replaycount = rc;
-for(c = 0; c < 32; c++)
-	{
-	packetout[PCAPREC_SIZE +0x33 +c] = anonce[c];
-	}
-if(write(fd_cap, packetout, PCAPREC_SIZE +M1WPA2DATA_SIZE) < 0)
-	{
-	perror("\nfailed to write EAPOL packet");
-	}
+for(c = 0; c < 32; c++) packetout[PCAPREC_SIZE +0x33 +c] = anonce[c];
+if(write(fd_cap, packetout, PCAPREC_SIZE +M1WPA2DATA_SIZE) < 0) perror("\nfailed to write EAPOL packet");
 return;
 }
 /*===========================================================================*/
@@ -215,9 +202,9 @@ static const uint8_t m1wpa2keyver3data[] =
 };
 #define M1WPA2KEYVER3DATA_SIZE sizeof(m1wpa2keyver3data)
 
-static uint8_t packetout[0xff];
+static uint8_t packetout[PACKETOUTBUFFSMAX];
 
-memset(&packetout, 0, 0xff);
+memset(&packetout, 0, PACKETOUTBUFFSMAX);
 pcaph = (pcaprec_hdr_t*)packetout;
 pcaph->ts_sec = timestamp /1000000;
 pcaph->ts_usec = timestamp %1000000;
@@ -236,14 +223,8 @@ rc = byte_swap_64(rc);
 #endif
 wpak->keylen = keylen;
 wpak->replaycount = rc;
-for(c = 0; c < 32; c++)
-	{
-	packetout[PCAPREC_SIZE +0x33 +c] = anonce[c];
-	}
-if(write(fd_cap, packetout, PCAPREC_SIZE +M1WPA2KEYVER3DATA_SIZE) < 0)
-	{
-	perror("\nfailed to write EAPOL packet");
-	}
+for(c = 0; c < 32; c++) packetout[PCAPREC_SIZE +0x33 +c] = anonce[c];
+if(write(fd_cap, packetout, PCAPREC_SIZE +M1WPA2KEYVER3DATA_SIZE) < 0) perror("\nfailed to write EAPOL packet");
 return;
 }
 /*===========================================================================*/
@@ -273,9 +254,9 @@ static const uint8_t pmkiddata[] =
 };
 #define PMKIDDATA_SIZE sizeof(pmkiddata)
 
-static uint8_t packetout[0xff];
+static uint8_t packetout[PACKETOUTBUFFSMAX];
 
-memset(&packetout, 0, 0xff);
+memset(&packetout, 0, PACKETOUTBUFFSMAX);
 pcaph = (pcaprec_hdr_t*)packetout;
 pcaph->ts_sec = timestamp /1000000;
 pcaph->ts_usec = timestamp %1000000;
@@ -288,10 +269,7 @@ memcpy(mach->addr1, macsta, 6);
 memcpy(mach->addr2, macap, 6);
 memcpy(mach->addr3, macap, 6);
 memcpy(&packetout[PCAPREC_SIZE +0x8b], pmkid, 16);
-if(write(fd_cap, packetout, PCAPREC_SIZE +PMKIDDATA_SIZE) < 0)
-	{
-	perror("\nfailed to write EAPOL packet");
-	}
+if(write(fd_cap, packetout, PCAPREC_SIZE +PMKIDDATA_SIZE) < 0) perror("\nfailed to write EAPOL packet");
 return;
 }
 /*===========================================================================*/
@@ -311,9 +289,9 @@ static const uint8_t m2data[] =
 };
 #define M2DATA_SIZE sizeof(m2data)
 
-static uint8_t packetout[0xff];
+static uint8_t packetout[PACKETOUTBUFFSMAX];
 
-memset(&packetout, 0, 0xff);
+memset(&packetout, 0, PACKETOUTBUFFSMAX);
 pcaph = (pcaprec_hdr_t*)packetout;
 pcaph->ts_sec = timestamp /1000000;
 pcaph->ts_usec = timestamp %1000000;
@@ -327,10 +305,7 @@ memcpy(mach->addr2, macsta, 6);
 memcpy(mach->addr3, macap, 6);
 memcpy(&packetout[PCAPREC_SIZE +M2DATA_SIZE], eapol, eapollen);
 memcpy(&packetout[PCAPREC_SIZE +M2DATA_SIZE +0x51], mic, 16);
-if(write(fd_cap, packetout, PCAPREC_SIZE +M2DATA_SIZE +eapollen) < 0)
-	{
-	perror("\nfailed to write EAPOL packet");
-	}
+if(write(fd_cap, packetout, PCAPREC_SIZE +M2DATA_SIZE +eapollen) < 0) perror("\nfailed to write EAPOL packet");
 return;
 }
 /*===========================================================================*/
@@ -351,9 +326,9 @@ static const uint8_t beacondata[] =
 };
 #define BEACONDATA_SIZE sizeof(beacondata)
 
-static uint8_t packetout[0xff];
+static uint8_t packetout[PACKETOUTBUFFSMAX];
 
-memset(&packetout, 0, 0xff);
+memset(&packetout, 0, PACKETOUTBUFFSMAX);
 pcaph = (pcaprec_hdr_t*)packetout;
 pcaph->ts_sec = timestamp /1000000;
 pcaph->ts_usec = timestamp %1000000;
@@ -367,10 +342,7 @@ memcpy(mach->addr1, &mac_broadcast, 6);
 memcpy(mach->addr2, macap, 6);
 memcpy(mach->addr3, macap, 6);
 mach->sequence = mybeaconsequence++ << 4;
-if(mybeaconsequence >= 4096)
-	{
-	mybeaconsequence = 0;
-	}
+if(mybeaconsequence >= 4096) mybeaconsequence = 0;
 capap = (capap_t*)(packetout +PCAPREC_SIZE +MAC_SIZE_NORM);
 capap->timestamp = myaponlinetime++;
 capap->beaconintervall = 0x64;
@@ -379,10 +351,7 @@ packetout[PCAPREC_SIZE +MAC_SIZE_NORM +CAPABILITIESAP_SIZE +1] = essidlen;
 memcpy(&packetout[PCAPREC_SIZE +MAC_SIZE_NORM +CAPABILITIESAP_SIZE +2], essid, essidlen);
 memcpy(&packetout[PCAPREC_SIZE +MAC_SIZE_NORM +CAPABILITIESAP_SIZE +2 +essidlen], &beacondata, BEACONDATA_SIZE);
 packetout[PCAPREC_SIZE +MAC_SIZE_NORM +CAPABILITIESAP_SIZE +2 +essidlen +0x0c] = myapchannel;
-if(write(fd_cap, packetout, PCAPREC_SIZE +MAC_SIZE_NORM +CAPABILITIESAP_SIZE +2 +essidlen +BEACONDATA_SIZE) < 0)
-	{
-	perror("\nfailed to write beacon packet");
-	}
+if(write(fd_cap, packetout, PCAPREC_SIZE +MAC_SIZE_NORM +CAPABILITIESAP_SIZE +2 +essidlen +BEACONDATA_SIZE) < 0) perror("\nfailed to write beacon packet");
 return;
 }
 /*===========================================================================*/
@@ -403,9 +372,9 @@ static const uint8_t beacondata[] =
 };
 #define BEACONDATA_SIZE sizeof(beacondata)
 
-static uint8_t packetout[0xff];
+static uint8_t packetout[PACKETOUTBUFFSMAX];
 
-memset(&packetout, 0, 0xff);
+memset(&packetout, 0, PACKETOUTBUFFSMAX);
 pcaph = (pcaprec_hdr_t*)packetout;
 pcaph->ts_sec = timestamp /1000000;
 pcaph->ts_usec = timestamp %1000000;
@@ -419,10 +388,7 @@ memcpy(mach->addr1, &mac_broadcast, 6);
 memcpy(mach->addr2, macap, 6);
 memcpy(mach->addr3, macap, 6);
 mach->sequence = mybeaconsequence++ << 4;
-if(mybeaconsequence >= 4096)
-	{
-	mybeaconsequence = 0;
-	}
+if(mybeaconsequence >= 4096) mybeaconsequence = 0;
 capap = (capap_t*)(packetout +PCAPREC_SIZE +MAC_SIZE_NORM);
 capap->timestamp = myaponlinetime++;
 capap->beaconintervall = 0x64;
@@ -431,10 +397,7 @@ packetout[PCAPREC_SIZE +MAC_SIZE_NORM +CAPABILITIESAP_SIZE +1] = essidlen;
 memcpy(&packetout[PCAPREC_SIZE +MAC_SIZE_NORM +CAPABILITIESAP_SIZE +2], essid, essidlen);
 memcpy(&packetout[PCAPREC_SIZE +MAC_SIZE_NORM +CAPABILITIESAP_SIZE +2 +essidlen], &beacondata, BEACONDATA_SIZE);
 packetout[PCAPREC_SIZE +MAC_SIZE_NORM +CAPABILITIESAP_SIZE +2 +essidlen +0x0c] = myapchannel;
-if(write(fd_cap, packetout, PCAPREC_SIZE +MAC_SIZE_NORM +CAPABILITIESAP_SIZE +2 +essidlen +BEACONDATA_SIZE) < 0)
-	{
-	perror("\nfailed to write beacon packet");
-	}
+if(write(fd_cap, packetout, PCAPREC_SIZE +MAC_SIZE_NORM +CAPABILITIESAP_SIZE +2 +essidlen +BEACONDATA_SIZE) < 0) perror("\nfailed to write beacon packet");
 return;
 }
 /*===========================================================================*/
@@ -455,9 +418,9 @@ static const uint8_t beacondata[] =
 };
 #define BEACONDATA_SIZE sizeof(beacondata)
 
-static uint8_t packetout[0xff];
+static uint8_t packetout[PACKETOUTBUFFSMAX];
 
-memset(&packetout, 0, 0xff);
+memset(&packetout, 0, PACKETOUTBUFFSMAX);
 pcaph = (pcaprec_hdr_t*)packetout;
 pcaph->ts_sec = timestamp /1000000;
 pcaph->ts_usec = timestamp %1000000;
@@ -471,10 +434,7 @@ memcpy(mach->addr1, &mac_broadcast, 6);
 memcpy(mach->addr2, macap, 6);
 memcpy(mach->addr3, macap, 6);
 mach->sequence = mybeaconsequence++ << 4;
-if(mybeaconsequence >= 4096)
-	{
-	mybeaconsequence = 0;
-	}
+if(mybeaconsequence >= 4096) mybeaconsequence = 0;
 capap = (capap_t*)(packetout +PCAPREC_SIZE +MAC_SIZE_NORM);
 capap->timestamp = myaponlinetime++;
 capap->beaconintervall = 0x64;
@@ -483,10 +443,7 @@ packetout[PCAPREC_SIZE +MAC_SIZE_NORM +CAPABILITIESAP_SIZE +1] = essidlen;
 memcpy(&packetout[PCAPREC_SIZE +MAC_SIZE_NORM +CAPABILITIESAP_SIZE +2], essid, essidlen);
 memcpy(&packetout[PCAPREC_SIZE +MAC_SIZE_NORM +CAPABILITIESAP_SIZE +2 +essidlen], &beacondata, BEACONDATA_SIZE);
 packetout[PCAPREC_SIZE +MAC_SIZE_NORM +CAPABILITIESAP_SIZE +2 +essidlen +0x0c] = myapchannel;
-if(write(fd_cap, packetout, PCAPREC_SIZE +MAC_SIZE_NORM +CAPABILITIESAP_SIZE +2 +essidlen +BEACONDATA_SIZE) < 0)
-	{
-	perror("\nfailed to write beacon packet");
-	}
+if(write(fd_cap, packetout, PCAPREC_SIZE +MAC_SIZE_NORM +CAPABILITIESAP_SIZE +2 +essidlen +BEACONDATA_SIZE) < 0) perror("\nfailed to write beacon packet");
 return;
 }
 /*===========================================================================*/
@@ -528,7 +485,6 @@ static void processpmkideapolfile(char *pmkideapolname, int fd_cap)
 {
 static int len;
 static int oflen;
-static int aktread = 1;
 static FILE *fhpmkideapol;
 static uint16_t essidlen;
 static uint16_t noncelen;
@@ -562,7 +518,6 @@ if((fhpmkideapol = fopen(pmkideapolname, "r")) == NULL)
 while(1)
 	{
 	if((len = fgetline(fhpmkideapol, PMKIDEAPOL_LINE_LEN, linein)) == -1) break;
-	aktread++;
 	if(len < 68)
 		{
 		pmkideapolcapskipped++;
@@ -773,10 +728,7 @@ if((fhpmkid = fopen(pmkidname, "r")) == NULL)
 	}
 while(1)
 	{
-	if((len = fgetline(fhpmkid, PMKID_LINE_LEN, linein)) == -1)
-		{
-		break;
-		}
+	if((len = fgetline(fhpmkid, PMKID_LINE_LEN, linein)) == -1) break;
 	if((len < 61) || ((len > 59 +(ESSID_LEN_MAX *2))))
 		{
 		fprintf(stderr, "reading hash line %d failed: %s\n", aktread, linein);
@@ -937,10 +889,7 @@ while(fread(&hcxdata, HCCAPX_SIZE, 1, fhhcx) == 1)
 	#ifdef BIG_ENDIAN_HOST
 	rc = byte_swap_64(rc);
 	#endif
-	if(keyinfo == 4)
-		{
-		rc--;
-		}
+	if(keyinfo == 4) rc--;
 	if(fd_cap == 0)
 		{
 		snprintf(singlecapname, 18, "%02x%02x%02x%02x%02x%02x.cap", hcxptr->mac_sta[0], hcxptr->mac_sta[1], hcxptr->mac_sta[2], hcxptr->mac_sta[3], hcxptr->mac_sta[4], hcxptr->mac_sta[5]);
